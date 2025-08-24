@@ -4,16 +4,37 @@ A configurable Python REST API proxy server designed for debugging and testing. 
 
 ## Features
 
-- **Multi-target configuration** - Configure multiple backend services with different endpoints
+- **Single target with multiple endpoints** - Configure one backend service with multiple endpoint behaviors
 - **Wildcard path matching** - Automatically forward unconfigured paths using `/*` patterns
 - **Failure injection** - Simulate various failure scenarios:
   - Count-based failures (fail on the Nth request)
   - Periodic failures (fail every N requests)
   - Probability-based failures (random failure rate)
   - Delayed responses with timeouts
+  - **Toggle functionality** - Enable/disable failure rules without deletion
 - **Request debugging** - Detailed logging of requests and responses
 - **Dynamic configuration reloading** - Changes to config file are applied automatically
 - **Environment variable support** - Use environment variables in configuration
+
+## Breaking Changes
+
+**Version 2.0+**: Configuration structure has changed from multiple targets to single target.
+
+**Before (v1.x):**
+```yaml
+targets:
+  service1: { url: "http://localhost:3001", endpoints: [...] }
+  service2: { url: "http://localhost:3002", endpoints: [...] }
+```
+
+**After (v2.0+):**
+```yaml
+target:
+  url: "http://localhost:3001"
+  endpoints: [...]
+```
+
+This change fixes the logical issue where there was no way to route requests to specific targets. All requests now go to the single configured target URL with endpoint-based path matching.
 
 ## Installation
 
@@ -30,7 +51,7 @@ pip install -r requirements.txt
 cp config.example.yaml config.yaml
 ```
 
-2. Edit `config.yaml` to configure your target services
+2. Edit `config.yaml` to configure your target service
 
 3. Run the proxy:
 ```bash
@@ -53,19 +74,18 @@ logging:
   level: "INFO"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-targets:
-  service-name:
-    url: "http://backend-service:3000"
-    headers:
-      X-Proxy-Source: "debug-proxy"
-    endpoints:
-      - path: "/api/users"
-        methods: ["GET", "POST"]
-        debug: true
-        failure_rules: []
-      - path: "/*"  # Wildcard - forwards all other paths
-        methods: ["*"]
-        debug: false
+target:
+  url: "http://backend-service:3000"
+  headers:
+    X-Proxy-Source: "debug-proxy"
+  endpoints:
+    - path: "/api/users"
+      methods: ["GET", "POST"]
+      debug: true
+      failure_rules: []
+    - path: "/*"  # Wildcard - forwards all other paths
+      methods: ["*"]
+      debug: false
 ```
 
 ### Failure Rules
@@ -75,6 +95,7 @@ Fail on a specific request number:
 ```yaml
 failure_rules:
   - condition:
+      enabled: true
       method: "POST"
       count: 3  # Fail on the 3rd POST request
     response:
@@ -87,6 +108,7 @@ Fail every N requests:
 ```yaml
 failure_rules:
   - condition:
+      enabled: true
       method: "GET"
       every: 10  # Fail every 10th GET request
     response:
@@ -99,6 +121,7 @@ Random failure rate:
 ```yaml
 failure_rules:
   - condition:
+      enabled: true
       method: "GET"
       probability: 0.1  # 10% chance of failure
     response:
@@ -111,6 +134,7 @@ Add delay before responding:
 ```yaml
 failure_rules:
   - condition:
+      enabled: true
       method: "POST"
       delay: 5000  # 5 second delay
     response:
@@ -118,15 +142,35 @@ failure_rules:
       body: {"error": "Request timeout"}
 ```
 
+#### Enabling/Disabling Rules
+Toggle failure rules without deleting them:
+```yaml
+failure_rules:
+  - condition:
+      enabled: true   # Active rule
+      method: "POST"
+      every: 3
+    response:
+      status_code: 503
+      body: {"error": "Service unavailable"}
+
+  - condition:
+      enabled: false  # Disabled rule
+      method: "GET"
+      probability: 0.1
+    response:
+      status_code: 500
+      body: {"error": "Random failure"}
+```
+
 ### Environment Variables
 
 Use environment variables in headers:
 ```yaml
-targets:
-  payment-service:
-    url: "https://api.stripe.com"
-    headers:
-      Authorization: "Bearer ${STRIPE_API_KEY}"
+target:
+  url: "https://api.stripe.com"
+  headers:
+    Authorization: "Bearer ${STRIPE_API_KEY}"
 ```
 
 ## Usage Examples
@@ -134,8 +178,8 @@ targets:
 ### Debugging API Calls
 Set `debug: true` on endpoints to see detailed request/response logging:
 ```
-2024-01-01 10:00:00 - proxy-server - INFO - [user-service] POST /api/users -> http://localhost:3001
-2024-01-01 10:00:01 - proxy-server - INFO - [user-service] Response: 201
+2024-01-01 10:00:00 - proxy-server - INFO - [proxy] POST /api/users -> http://localhost:3001
+2024-01-01 10:00:01 - proxy-server - INFO - [proxy] Response: 201
 ```
 
 ### Testing Failure Scenarios
