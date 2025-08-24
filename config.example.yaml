@@ -1,0 +1,71 @@
+server:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+targets:
+  user-service:
+    url: "http://localhost:3001"
+    headers:
+      X-Proxy-Source: "debug-proxy"
+    endpoints:
+      - path: "/api/users"
+        methods: ["GET", "POST", "PUT", "DELETE"]
+        debug: true
+        failure_rules:
+          - condition:
+              method: "POST"
+              #count: 3
+              every: 1
+            response:
+              status_code: 503
+              body: {"error": "Service temporarily unavailable"}
+      - path: "/api/users/.*"
+        methods: ["GET"]
+        debug: true
+        failure_rules:
+          - condition:
+              method: "GET"
+              probability: 0.1
+            response:
+              status_code: 500
+              body: {"error": "Internal server error"}
+          - condition:
+              method: "GET"
+              every: 10
+            response:
+              status_code: 429
+              body: {"error": "Rate limited - every 10th request"}
+      - path: "/*"
+        methods: ["*"]
+        debug: false
+
+  auth-service:
+    url: "http://localhost:3002"
+    endpoints:
+      - path: "/auth/login"
+        methods: ["POST"]
+        debug: true
+        failure_rules:
+          - condition:
+              method: "POST"
+              delay: 5000
+            response:
+              status_code: 408
+              body: {"error": "Request timeout"}
+      - path: "/auth/*"
+        methods: ["*"]
+        debug: true
+
+  payment-service:
+    url: "https://api.stripe.com"
+    headers:
+      Authorization: "Bearer ${STRIPE_API_KEY}"
+    endpoints:
+      - path: "/payments/*"
+        methods: ["*"]
+        debug: false
