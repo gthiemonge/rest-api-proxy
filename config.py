@@ -1,11 +1,13 @@
-import yaml
 import os
-from typing import Dict, List, Optional, Any
-from pydantic import BaseModel
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
+from pydantic import BaseModel
 
 
 class FailureCondition(BaseModel):
+    enabled: bool = True
     method: Optional[str] = None
     count: Optional[int] = None
     every: Optional[int] = None
@@ -51,7 +53,7 @@ class LoggingConfig(BaseModel):
 class ProxyConfig(BaseModel):
     server: ServerConfig
     logging: LoggingConfig
-    targets: Dict[str, Target]
+    target: Target
 
 
 def load_config(config_path: str = "config.yaml") -> ProxyConfig:
@@ -59,15 +61,19 @@ def load_config(config_path: str = "config.yaml") -> ProxyConfig:
     if not config_file.exists():
         raise FileNotFoundError(f"Configuration file {config_path} not found")
 
-    with open(config_file, 'r') as f:
+    with open(config_file, "r") as f:
         config_data = yaml.safe_load(f)
 
     # Expand environment variables in headers
-    for target_name, target_data in config_data.get('targets', {}).items():
-        if 'headers' in target_data:
-            for key, value in target_data['headers'].items():
-                if isinstance(value, str) and value.startswith('${') and value.endswith('}'):
-                    env_var = value[2:-1]
-                    target_data['headers'][key] = os.getenv(env_var, value)
+    target_data = config_data.get("target", {})
+    if "headers" in target_data:
+        for key, value in target_data["headers"].items():
+            if (
+                isinstance(value, str)
+                and value.startswith("${")
+                and value.endswith("}")
+            ):
+                env_var = value[2:-1]
+                target_data["headers"][key] = os.getenv(env_var, value)
 
     return ProxyConfig(**config_data)

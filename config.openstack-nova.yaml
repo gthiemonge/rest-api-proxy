@@ -1,0 +1,137 @@
+server:
+  host: "0.0.0.0"
+  port: 8774  # Default Nova API port
+  debug: true
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+target:
+  url: "http://localhost:8774"
+  headers:
+    X-Proxy-Source: "debug-proxy"
+    # Add your OpenStack auth token here or use environment variable
+    X-Auth-Token: "${OS_AUTH_TOKEN}"
+  endpoints:
+    # Interface attachment operations
+    - path: "/v2.1/servers/.*/os-interface"
+      methods: ["POST"]
+      debug: true
+      failure_rules:
+        # Fail every 3rd interface attach request
+        - condition:
+            enabled: true
+            method: "POST"
+            every: 3
+          response:
+            status_code: 500
+            body: {"computeFault": {"message": "Failed to attach interface - simulated network error", "code": 500}}
+        # Random 10% failure rate for interface attachments
+        - condition:
+            enabled: true
+            method: "POST"
+            probability: 0.1
+          response:
+            status_code: 409
+            body: {"conflictingRequest": {"message": "Interface attachment conflict - port already in use", "code": 409}}
+
+    # Interface detachment operations
+    - path: "/v2.1/servers/.*/os-interface/.*"
+      methods: ["DELETE"]
+      debug: true
+      failure_rules:
+        # Simulate timeout on interface detachment
+        - condition:
+            enabled: true
+            method: "DELETE"
+            every: 5
+            delay: 30000  # 30 second delay
+          response:
+            status_code: 408
+            body: {"requestTimeout": {"message": "Interface detachment timed out", "code": 408}}
+
+    # List interfaces for debugging
+    - path: "/v2.1/servers/.*/os-interface"
+      methods: ["GET"]
+      debug: true
+
+    # Server creation with network interfaces
+    - path: "/v2.1/servers"
+      methods: ["POST"]
+      debug: true
+      failure_rules:
+        # Fail server creation when multiple networks are specified
+        - condition:
+            enabled: true
+            method: "POST"
+            count: 2  # Fail on 2nd server creation attempt
+          response:
+            status_code: 400
+            body: {"badRequest": {"message": "Network interface configuration error during server creation", "code": 400}}
+
+    # Port operations (if Nova manages ports directly)
+    - path: "/v2.1/os-ports.*"
+      methods: ["GET", "POST", "DELETE"]
+      debug: true
+      failure_rules:
+        - condition:
+            enabled: true
+            method: "POST"
+            probability: 0.05  # 5% failure on port creation
+          response:
+            status_code: 503
+            body: {"serviceUnavailable": {"message": "Port allocation service temporarily unavailable", "code": 503}}
+
+    # Quota-related failures for network resources
+    - path: "/v2.1/os-quota-sets/.*"
+      methods: ["GET", "PUT"]
+      debug: true
+
+    # Server actions that might involve network changes
+    - path: "/v2.1/servers/.*/action"
+      methods: ["POST"]
+      debug: true
+      failure_rules:
+        # Fail rebuild/resize operations that involve network reconfig
+        - condition:
+            enabled: true
+            method: "POST"
+            every: 7
+          response:
+            status_code: 422
+            body: {"unprocessableEntity": {"message": "Cannot complete server action due to network interface error", "code": 422}}
+
+    # Neutron API calls for network operations (if proxying both Nova and Neutron through same proxy)
+    - path: "/v2.0/ports"
+      methods: ["GET", "POST", "PUT", "DELETE"]
+      debug: true
+      failure_rules:
+        # Simulate port creation failures
+        - condition:
+            enabled: true
+            method: "POST"
+            every: 4
+          response:
+            status_code: 500
+            body: {"NeutronError": {"message": "Failed to create port - subnet exhausted", "type": "SubnetExhausted"}}
+
+    # Network operations
+    - path: "/v2.0/networks.*"
+      methods: ["GET", "POST", "PUT", "DELETE"]
+      debug: true
+
+    # Subnet operations
+    - path: "/v2.0/subnets.*"
+      methods: ["GET", "POST", "PUT", "DELETE"]
+      debug: true
+
+    # Security group operations
+    - path: "/v2.0/security-groups.*"
+      methods: ["GET", "POST", "PUT", "DELETE"]
+      debug: true
+
+    # Wildcard for all other API calls
+    - path: "/*"
+      methods: ["*"]
+      debug: false
