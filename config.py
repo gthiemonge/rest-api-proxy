@@ -43,6 +43,8 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
+    workers: int = 1
+    limit_concurrency: Optional[int] = None
 
 
 class LoggingConfig(BaseModel):

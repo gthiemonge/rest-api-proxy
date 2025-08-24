@@ -1,8 +1,8 @@
+import asyncio
 import logging
 import random
 import re
 import threading
-import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Optional
@@ -58,9 +58,6 @@ class FailureInjector:
         if condition.probability:
             if random.random() > condition.probability:
                 return False
-
-        if condition.delay:
-            time.sleep(condition.delay / 1000.0)
 
         return True
 
@@ -184,6 +181,13 @@ class ProxyServer:
         if endpoint:
             for rule in endpoint.failure_rules:
                 if self.failure_injector.should_inject_failure(rule, method, path):
+                    # Handle delay asynchronously if specified
+                    if rule.condition.delay:
+                        self.logger.info(
+                            f"[proxy] Delaying response by {rule.condition.delay}ms"
+                        )
+                        await asyncio.sleep(rule.condition.delay / 1000.0)
+
                     self.logger.warning(
                         f"[proxy] Injecting failure for {method} {path}: {rule.response.status_code}"
                     )
@@ -268,12 +272,33 @@ class ProxyServer:
 
     def run(self):
         try:
-            uvicorn.run(
-                self.app,
-                host=self.config.server.host,
-                port=self.config.server.port,
-                log_level=self.config.logging.level.lower(),
-            )
+            uvicorn_config = {
+                "app": self.app,
+                "host": self.config.server.host,
+                "port": self.config.server.port,
+                "log_level": self.config.logging.level.lower(),
+            }
+
+            # Add concurrency settings if specified
+            if self.config.server.limit_concurrency:
+                uvicorn_config[
+                    "limit_concurrency"
+                ] = self.config.server.limit_concurrency
+
+            # Note: workers > 1 disables file watcher due to process isolation
+            if self.config.server.workers > 1:
+                uvicorn_config["workers"] = self.config.server.workers
+                self.logger.warning(
+                    f"Running with {self.config.server.workers} workers - "
+                    "config file watching will be disabled"
+                )
+                # Stop file watcher when using multiple workers
+                if self.observer:
+                    self.observer.stop()
+                    self.observer.join()
+                    self.observer = None
+
+            uvicorn.run(**uvicorn_config)
         finally:
             if self.observer:
                 self.observer.stop()

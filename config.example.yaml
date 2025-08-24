@@ -2,6 +2,8 @@ server:
   host: "0.0.0.0"
   port: 8000
   debug: true
+  workers: 1  # Use multiple workers for better concurrency (disables config watching)
+  # limit_concurrency: 100  # Optional: limit concurrent connections
 
 logging:
   level: "INFO"
@@ -49,7 +51,7 @@ target:
         - condition:
             enabled: true
             method: "POST"
-            delay: 5000
+            delay: 5000  # Async delay - doesn't block other requests
           response:
             status_code: 408
             body: {"error": "Request timeout"}
