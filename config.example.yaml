@@ -42,7 +42,7 @@ targets:
               body: {"error": "Rate limited - every 10th request"}
       - path: "/*"
         methods: ["*"]
-        debug: false
+        debug: true
 
   auth-service:
     url: "http://localhost:3002"

@@ -138,9 +138,32 @@ class ProxyServer:
         if not target:
             raise HTTPException(status_code=404, detail="No matching target found")
 
+        # Read request body early for logging and later use
+        body = await request.body()
+
+        # Log request details immediately, before any failure injection
         if endpoint and endpoint.debug:
             self.logger.info(f"[{target_name}] {method} {path} -> {target.url}")
 
+            # Log request headers
+            headers_str = "\n".join([f"    {k}: {v}" for k, v in request.headers.items()])
+            self.logger.info(f"[{target_name}] Request headers:\n{headers_str}")
+
+            # Log request body if present
+            if body:
+                try:
+                    # Try to decode as UTF-8 text
+                    body_str = body.decode('utf-8')
+                    # Truncate very long bodies
+                    if len(body_str) > 1000:
+                        body_str = body_str[:1000] + "... (truncated)"
+                    self.logger.info(f"[{target_name}] Request body:\n{body_str}")
+                except UnicodeDecodeError:
+                    self.logger.info(f"[{target_name}] Request body: <binary data, {len(body)} bytes>")
+            else:
+                self.logger.info(f"[{target_name}] Request body: <empty>")
+
+        # Check for failure injection after logging
         if endpoint:
             for rule in endpoint.failure_rules:
                 if self.failure_injector.should_inject_failure(rule, method, path):
@@ -151,7 +174,6 @@ class ProxyServer:
                         headers=rule.response.headers or {}
                     )
 
-        body = await request.body()
         headers = dict(request.headers)
 
         if target.headers:
@@ -161,6 +183,19 @@ class ProxyServer:
         headers.pop("host", None)
 
         target_url = f"{target.url.rstrip('/')}{path}"
+
+        # Log actual request being sent to backend (after header modifications)
+        if endpoint and endpoint.debug:
+            self.logger.info(f"[{target_name}] Sending to backend: {method} {target_url}")
+
+            # Log final headers that will be sent
+            final_headers_str = "\n".join([f"    {k}: {v}" for k, v in headers.items()])
+            self.logger.info(f"[{target_name}] Final request headers:\n{final_headers_str}")
+
+            # Log query parameters if any
+            if request.query_params:
+                params_str = "\n".join([f"    {k}: {v}" for k, v in request.query_params.items()])
+                self.logger.info(f"[{target_name}] Query parameters:\n{params_str}")
 
         try:
             response = await self.client.request(
@@ -173,6 +208,22 @@ class ProxyServer:
 
             if endpoint and endpoint.debug:
                 self.logger.info(f"[{target_name}] Response: {response.status_code}")
+
+                # Log response headers
+                resp_headers_str = "\n".join([f"    {k}: {v}" for k, v in response.headers.items()])
+                self.logger.info(f"[{target_name}] Response headers:\n{resp_headers_str}")
+
+                # Log response body if present
+                if response.content:
+                    try:
+                        # Try to decode as UTF-8 text
+                        resp_body_str = response.content.decode('utf-8')
+                        # Truncate very long bodies
+                        if len(resp_body_str) > 1000:
+                            resp_body_str = resp_body_str[:1000] + "... (truncated)"
+                        self.logger.info(f"[{target_name}] Response body:\n{resp_body_str}")
+                    except UnicodeDecodeError:
+                        self.logger.info(f"[{target_name}] Response body: <binary data, {len(response.content)} bytes>")
 
             response_headers = dict(response.headers)
             response_headers.pop("content-encoding", None)
