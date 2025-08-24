@@ -1,7 +1,9 @@
+import argparse
 import asyncio
 import logging
 import random
 import re
+import sys
 import threading
 from collections import defaultdict
 from pathlib import Path
@@ -306,12 +308,43 @@ class ProxyServer:
 
 
 def main():
-    config_path = "config.yaml"
+    parser = argparse.ArgumentParser(
+        description="Debug Proxy Server - Configurable REST API proxy for debugging and testing"
+    )
+    parser.add_argument(
+        "config",
+        nargs="?",
+        default="config.yaml",
+        help="Path to configuration file (default: config.yaml, fallback: config.example.yaml)",
+    )
+    parser.add_argument(
+        "--version", action="version", version="Debug Proxy Server 2.1.0"
+    )
+
+    args = parser.parse_args()
+    config_path = args.config
+
     try:
         config = load_config(config_path)
+        print(f"Loaded configuration from: {config_path}")
     except FileNotFoundError:
-        config_path = "config.example.yaml"
-        config = load_config(config_path)
+        if config_path == "config.yaml":
+            # Only try fallback if using default config
+            try:
+                config_path = "config.example.yaml"
+                config = load_config(config_path)
+                print(
+                    f"Config file 'config.yaml' not found, using fallback: {config_path}"
+                )
+            except FileNotFoundError:
+                print("Error: Neither 'config.yaml' nor 'config.example.yaml' found")
+                sys.exit(1)
+        else:
+            print(f"Error: Configuration file '{config_path}' not found")
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error loading configuration from '{config_path}': {e}")
+        sys.exit(1)
 
     server = ProxyServer(config, config_path)
     server.run()
