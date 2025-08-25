@@ -6,6 +6,7 @@ A configurable Python REST API proxy server designed for debugging and testing. 
 
 - **Single target with multiple endpoints** - Configure one backend service with multiple endpoint behaviors
 - **Wildcard path matching** - Automatically forward unconfigured paths using `/*` patterns
+- **URL path transformation** - Add prefixes to backend URLs (e.g., `/v2.0/foo` → `/service/v2.0/foo`)
 - **Failure injection** - Simulate various failure scenarios:
   - Count-based failures (fail on the Nth request)
   - Periodic failures (fail every N requests)
@@ -76,6 +77,7 @@ logging:
 
 target:
   url: "http://backend-service:3000"
+  path_prefix: "/api/v1"  # Optional: prepend to all requests
   headers:
     X-Proxy-Source: "debug-proxy"
   endpoints:
@@ -162,6 +164,21 @@ failure_rules:
       status_code: 500
       body: {"error": "Random failure"}
 ```
+
+### Path Prefix
+
+Transform request URLs by adding a prefix to the backend URL:
+```yaml
+target:
+  url: "http://backend-service:3000"
+  path_prefix: "/service"  # Transform /v2.0/foo -> /service/v2.0/foo
+  endpoints: [...]
+```
+
+This feature is useful for:
+- Adding versioning prefixes (e.g., `/api/v1` before all paths)
+- Routing to specific service endpoints
+- Legacy API path compatibility
 
 ### Environment Variables
 
