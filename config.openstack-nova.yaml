@@ -9,6 +9,7 @@ logging:
 
 target:
   url: "http://localhost:8774"
+  path_prefix: "/compute"  # Prepend to all requests (e.g., /v2.1/servers -> /compute/v2.1/servers)
   headers:
     X-Proxy-Source: "debug-proxy"
     # Add your OpenStack auth token here or use environment variable

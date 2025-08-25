@@ -207,7 +207,13 @@ class ProxyServer:
         # Remove host header to avoid conflicts
         headers.pop("host", None)
 
-        target_url = f"{target.url.rstrip('/')}{path}"
+        # Construct target URL with optional path prefix
+        if target.path_prefix:
+            # Ensure path_prefix starts with / and doesn't end with /
+            prefix = target.path_prefix.strip("/")
+            target_url = f"{target.url.rstrip('/')}/{prefix}{path}"
+        else:
+            target_url = f"{target.url.rstrip('/')}{path}"
 
         # Log actual request being sent to backend (after header modifications)
         if endpoint and endpoint.debug:

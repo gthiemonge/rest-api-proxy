@@ -35,6 +35,7 @@ class Endpoint(BaseModel):
 
 class Target(BaseModel):
     url: str
+    path_prefix: Optional[str] = None
     headers: Optional[Dict[str, str]] = None
     endpoints: List[Endpoint] = []
 
